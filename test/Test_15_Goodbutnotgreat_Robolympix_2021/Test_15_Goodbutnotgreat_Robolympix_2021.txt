@@ -1,0 +1,273 @@
+//Variables encodeurs
+#define outputAR 2
+#define outputBR 3
+#define outputAL 18
+#define outputBL 19
+volatile float Rdist = 0;
+volatile float Ldist = 0;
+volatile float distUnitR = (float)PI * 40 / 1024 / 10;
+volatile float distUnitL = (float)PI * 40 / 600 / 10;
+
+float Rdistacc=0;
+float Ldistacc=0;
+float Rdistdec=0;
+float Ldistdec=0;
+
+volatile unsigned long firstTime;
+volatile boolean Stop=false;
+
+//Variables moteurs
+volatile float vitesseR = 0 ;
+volatile float vitesseL = 0 ;
+volatile float vitesseO = 0 ;
+#define forwardR 6
+#define backwardR 7
+#define forwardL 5
+#define backwardL 4
+
+//Variables erreurs/commandes position
+float Rcmd = 0;
+float Lcmd = 0; 
+volatile float Rerror;
+volatile float Lerror;
+volatile float prevRerror = 0;
+volatile float prevLerror = 0;
+volatile float sommeRerror = 0;
+volatile float sommeLerror = 0;
+
+//Variables erreurs vitesse
+volatile float Oerror;
+volatile float prevOerror = 0;
+volatile float sommeOerror = 0;
+
+//Encoder functions
+void ISRtrackAR() {
+  Rdist += (digitalRead(outputBR) == LOW) ? distUnitR : -distUnitR;
+}
+void ISRtrackBR() {
+  Rdist += (digitalRead(outputAR) == LOW) ? -distUnitR : distUnitR;
+}
+
+void ISRtrackAL() {
+  Ldist += (digitalRead(outputBL) == LOW) ? distUnitL : -distUnitL;
+}
+
+void ISRtrackBL() {
+  Ldist += (digitalRead(outputAL) == LOW) ? -distUnitL : distUnitL;
+}
+
+//Motor functions
+void motorR(volatile float vR) {
+  if (vR > 0) {
+    analogWrite(forwardR, vR);
+    analogWrite(backwardR, 0);
+  }
+  else {
+    analogWrite(forwardR, 0);
+    analogWrite(backwardR, -vR); //5.2
+  }
+}
+
+void motorL(volatile float vL) {
+  if (vL > 0) {
+    analogWrite(forwardL, vL);
+    analogWrite(backwardL, 0);
+  }
+  else {
+    analogWrite(forwardL, 0);
+    analogWrite(backwardL, -vL); //5.2
+  }
+}
+
+//PID Position Parameters
+
+float kpR = 5;
+float kpL = 5;
+
+float kdR = 1;
+float kdL = 10;
+
+float kiR = 0.0002;
+float kiL = 0.0002; 
+
+float kpO = 4; // 0.001 kp seul
+float kdO = 80; 
+float kiO = 10;
+
+
+volatile float kvR=0;
+volatile float kvL=0;
+
+void PIDorientation() {
+  Oerror = Rdist - Ldist;
+  sommeOerror += Oerror;
+  vitesseO = (kpO * Oerror) + (kdO * (Oerror - prevOerror)) + kiO * sommeOerror;
+  prevOerror = Oerror;
+}
+
+void PIDposition() {
+
+  Rerror = Rcmd - Rdist;
+  sommeRerror +=  Rerror ;
+
+  Lerror = Lcmd - Ldist;
+  sommeLerror +=  Lerror ;
+
+  //if (!(Rerror<0 || Lerror<0))
+      PIDorientation();
+
+  vitesseR = (kpR * Rerror) + (kdR * (Rerror - prevRerror)) + kiR * sommeRerror;
+  vitesseL = (kpL * Lerror) + (kdL * (Lerror - prevLerror)) + kiL * sommeLerror;
+
+  vitesseR = (vitesseR > 180) ? 180 : vitesseR;
+  vitesseL = (vitesseL > 180) ? 180 : vitesseL;
+
+  if (Rdist+Ldist<Rdistacc+Ldistacc){
+       vitesseR = vitesseR / Rdistacc * Rdist;
+       vitesseL = vitesseL / Ldistacc * Ldist;
+  }
+  else if (Rdist+Ldist>Rdistdec+Ldistdec){
+       vitesseR = vitesseR / Rdistdec * Rdist; 
+       vitesseL = vitesseL / Ldistdec * Ldist;
+  }
+  
+  vitesseR = ((vitesseR < 90) && (Rerror > 0)) ? 90 : vitesseR; // min 72
+  vitesseL = ((vitesseL < 90) && (Lerror > 0)) ? 90 : vitesseL;// min 72
+
+  
+  /*if (Rdist>Rcmd){
+       vitesseR = -(vitesseR / Rerror) * Rdist;
+       if (Rerror==prevRerror && Rerror!=0)
+          kvR+=0.001;
+  }
+  if (Ldist>Lcmd){
+       vitesseL = -(vitesseL / Lerror) * Ldist;
+       if (Rerror==prevRerror && Lerror!=0)
+          kvL+=0.001;
+  }*/
+  
+  if (Oerror!=0){
+      vitesseR -= vitesseO;
+      vitesseL += vitesseO;
+  }
+   
+  prevRerror = Rerror;
+  prevLerror = Lerror;
+}
+
+void Go(float cmd){
+  Rcmd=cmd;   //+10.3
+  Lcmd=cmd;   //+10.2
+  
+  Rdistacc=Rcmd*0.1;
+  Ldistacc=Lcmd*0.1;
+  Rdistdec=Rcmd*0.15;
+  Ldistdec=Lcmd*0.15;
+  
+  PIDposition();
+  motorR(vitesseR);
+  motorL(vitesseL);
+  if ((prevRerror=!0) && (prevLerror!=0) && (prevLerror==Lerror) && (prevRerror==Rerror) && (millis>firstTime))
+      Stop=true;
+}
+void TurnRight(float angle){
+  Rcmd=-20.8*angle; 
+  Lcmd=20.8*angle;
+  
+  Rdistacc=Rcmd*0.1;
+  Ldistacc=Lcmd*0.1;
+  Rdistdec=Rcmd*0.20;
+  Ldistdec=Lcmd*0.20;
+  
+  PIDposition();
+  motorR(-vitesseR);
+  motorL(vitesseL);
+  if ((prevRerror=!0) && (prevLerror!=0) && (prevLerror==Lerror) && (prevRerror==Rerror) && (millis>firstTime))
+    Stop=true;
+}
+void TurnLeft(float angle){
+  Rcmd=20.8*angle;
+  Lcmd=-20.8*angle;
+
+  Rdistacc=Rcmd*0.1;
+  Ldistacc=Lcmd*0.1;
+  Rdistdec=Rcmd*0.20;
+  Ldistdec=Lcmd*0.20;
+  
+  PIDposition();
+  motorR(vitesseR);
+  motorL(-vitesseL);
+  if ((prevRerror=!0) && (prevLerror!=0) && (prevLerror==Lerror) && (prevRerror==Rerror) && (millis>firstTime))
+    Stop=true;
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  //Command Encoders
+  pinMode(outputAR, INPUT_PULLUP);
+  pinMode(outputBR, INPUT_PULLUP);
+  pinMode(outputAL, INPUT_PULLUP);
+  pinMode(outputBL, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(outputAR), ISRtrackAR, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputAL), ISRtrackAL, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputBR), ISRtrackBR, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputBL), ISRtrackBL, RISING);
+
+
+  //Command Motors
+  pinMode(forwardR, OUTPUT);
+  pinMode(backwardR, OUTPUT);
+  pinMode(forwardL, OUTPUT);
+  pinMode(backwardL, OUTPUT);
+
+  
+
+}
+
+
+void loop() {
+  firstTime=millis();
+  Go(10);
+  //if (Stop)
+    //Go(-10);  
+  //TurnRight(90);
+  
+  /*Serial.print("vitesseL= ");
+  Serial.print(vitesseL);
+  Serial.print(" \tvitesseR= ");
+  Serial.print(vitesseR);
+  Serial.print("Oerror= ");
+  Serial.print(Oerror);*/
+  
+
+  Serial.print("Lerror= ");
+  Serial.print(Lerror);
+  Serial.print(" \tRerror= ");
+  Serial.print(Rerror);
+  
+  Serial.print(" \tLdist= ");
+  Serial.print(Ldist);
+  Serial.print(" \tRdist= ");
+  Serial.println(Rdist);
+  
+  /*if (Rerror>0 && Lerror>0){
+    motorR(82);
+    motorL(92);
+    }
+    else
+     if(Rerror>0){
+        motorR(82);
+        motorL(0);
+      }
+      else
+        if (Lerror>0){
+          motorR(0);
+          motorL(92);
+        }
+        else{
+          motorR(0);
+          motorL(0);
+        }*/
+}

@@ -1,0 +1,256 @@
+//Variables encodeurs
+#define outputAR 2
+#define outputBR 3
+#define outputAL 18
+#define outputBL 19
+volatile float Rdist = 0;
+volatile float Ldist = 0;
+volatile float distUnitR = (float)PI * 40 / 1024 / 10;
+volatile float distUnitL = (float)PI * 40 / 600 / 10;
+
+float Rdistacc=0;
+float Ldistacc=0;
+float Rdistdec=0;
+float Ldistdec=0;
+
+//Variables moteurs
+float vitesseR = 0 ;
+float vitesseL = 0 ;
+float vitesseO = 0 ;
+#define forwardR 6
+#define backwardR 7
+#define forwardL 5
+#define backwardL 4
+float temp;
+
+//Variables erreurs/commandes position
+volatile float Rcmd = 10; //110.3
+volatile float Lcmd = 10; //110.2
+volatile float Rerror;
+volatile float Lerror;
+float prevRerror = 0;
+float prevLerror = 0;
+float sommeRerror = 0;
+float sommeLerror = 0;
+
+//Variables erreurs vitesse
+volatile float Oerror;
+float prevOerror = 0;
+float sommeOerror = 0;
+
+//Encoder functions
+void ISRtrackAR() {
+  Rdist += (digitalRead(outputBR) == LOW) ? distUnitR : -distUnitR;
+}
+void ISRtrackBR() {
+  Rdist += (digitalRead(outputAR) == LOW) ? -distUnitR : distUnitR;
+}
+
+void ISRtrackAL() {
+  Ldist += (digitalRead(outputBL) == LOW) ? distUnitL : -distUnitL;
+}
+
+void ISRtrackBL() {
+  Ldist += (digitalRead(outputAL) == LOW) ? -distUnitL : distUnitL;
+}
+
+//Motor functions
+void motorR(float vR) {
+  if (vR > 0) {
+    analogWrite(forwardR, vR);
+    analogWrite(backwardR, 0);
+  }
+  else {
+    analogWrite(forwardR, 0);
+    analogWrite(backwardR, -10 * vR); //5.2
+  }
+}
+
+void motorL(float vL) {
+  if (vL > 0) {
+    analogWrite(forwardL, vL);
+    analogWrite(backwardL, 0);
+  }
+  else {
+    analogWrite(forwardL, 0);
+    analogWrite(backwardL, -10 * vL); //5.2
+  }
+}
+
+//PID Position Parameters
+
+volatile float kpR = 0 ; // 0.01 // 0.4
+volatile float kpL = 0 ; // 0.01 // 0.4
+
+volatile float kdR = 0; // 58 // 7
+volatile float kdL = 0; // 58 // 7
+
+volatile float kiR = 0 ; // 0.000000000001
+volatile float kiL = 0; // 0.000000000001
+
+//DONT TOUCH
+float kpO = 10;
+float kdO = 0; 
+float kiO = 0.0000000000000000000001;
+
+void PIDorientation() {
+  Oerror = Rdist - Ldist;
+  sommeOerror += Oerror;
+  vitesseO = (kpO * Oerror) + (kdO * (Oerror - prevOerror)) + kiO * sommeOerror;
+  prevOerror = Oerror;
+}
+
+
+
+void PIDposition(volatile float error,volatile float cmd, float sommeerror, float vitesse, float preverror,volatile float dist) {
+  temp=vitesse;
+  
+  error = cmd - dist;
+  sommeerror +=  error ;
+  
+  PIDorientation();
+
+  vitesse = (kpR * error) + (kdR * (error - preverror)) + kiR * sommeerror;
+
+  vitesse = (vitesse > 180) ? 180 : vitesse;
+
+  if (dist<Rdistacc) {
+    vitesse = vitesse / Rdistacc * dist;
+  }
+
+  vitesse = ((vitesse < 100) && (error > 0)) ? 100 : vitesse; // min 72
+  
+  if (temp==vitesseR){
+    vitesseR =vitesse- vitesseO;
+    vitesseL += vitesseO;
+  }
+  else{
+    vitesseR -= vitesseO;
+    vitesseL =vitesse+ vitesseO;
+  }
+
+  //Update errors
+  preverror = error;
+
+  motorR(vitesseR);
+  motorL(vitesseL);
+}
+
+void AutoPID(){
+
+  Rdistacc=Rcmd*0.1;
+  Ldistacc=Lcmd*0.1;
+  Rdistdec=Rcmd*0.15;
+  Ldistdec=Lcmd*0.15;
+    //RightPID
+    if (Rdist>Rcmd){
+      kpR-=0.03;
+      PIDposition(Rerror,Rcmd,sommeRerror,vitesseR,prevRerror,Rdist);
+    }
+    else if (Rdist<Rcmd){
+      kpR+=0.03;
+      PIDposition(Rerror,Rcmd,sommeRerror,vitesseR,prevRerror,Rdist);
+    }   
+    if(Rdist>Rcmd-Rdistdec){
+        kdR+=0.09;
+        PIDposition(Rerror,Rcmd,sommeRerror,vitesseR,prevRerror,Rdist);
+      }
+      else if(Rdist>Rcmd-Rcmd*1.07){
+        kiR+=0.000001;
+        PIDposition(Rerror,Rcmd,sommeRerror,vitesseR,prevRerror,Rdist);
+      }    
+      else          
+        motorR(0);
+      
+     //LeftPID 
+    if (Ldist<Lcmd){
+      kpL+=0.03;
+      PIDposition(Lerror,Lcmd,sommeLerror,vitesseL,prevLerror,Ldist);
+    }
+    else if(Ldist>Lcmd-Ldistdec){
+        kdL+=0.09;
+        PIDposition(Lerror,Lcmd,sommeLerror,vitesseL,prevLerror,Ldist);
+      }
+      else if(Ldist>Lcmd-Lcmd*1.07){
+        kiL+=0.000001;
+        PIDposition(Lerror,Lcmd,sommeLerror,vitesseL,prevLerror,Ldist);
+      }    
+      else          
+        motorL(0);
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  //Command Encoders
+  pinMode(outputAR, INPUT_PULLUP);
+  pinMode(outputBR, INPUT_PULLUP);
+  pinMode(outputAL, INPUT_PULLUP);
+  pinMode(outputBL, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(outputAR), ISRtrackAR, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputAL), ISRtrackAL, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputBR), ISRtrackBR, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputBL), ISRtrackBL, RISING);
+
+  //Command Motors
+  pinMode(forwardR, OUTPUT);
+  pinMode(backwardR, OUTPUT);
+  pinMode(forwardL, OUTPUT);
+  pinMode(backwardL, OUTPUT);
+}
+
+void loop() {
+  PIDposition(Rerror,Rcmd,sommeRerror,vitesseR,prevRerror,Rdist);
+  PIDposition(Lerror,Lcmd,sommeLerror,vitesseL,prevLerror,Ldist);
+  AutoPID();
+  /*Serial.print(Ldist);
+  Serial.print(" ");
+  Serial.print(Lerror);
+  Serial.print(" ");
+  Serial.print(Rdist);
+  Serial.print(" ");
+  Serial.println(Rerror);*/
+ 
+  Serial.print("Rerror= ");
+  Serial.print(Rerror);
+  Serial.print("\tkpR= ");
+  Serial.print(kpR);
+  Serial.print("\tkdR= ");
+  Serial.print(kdR);
+  Serial.print("\tkiR= ");
+  Serial.print(kiR);
+  
+  Serial.print("\tLerror= ");
+  Serial.print(Lerror);
+  Serial.print("\tkpL= ");
+  Serial.print(kpL);
+  Serial.print("\tkdL= ");
+  Serial.print(kdL);
+  Serial.print("\tkiL= ");
+  Serial.println(kiL);
+  
+  /*Serial.print("\tLcmd= ");
+  Serial.print(Lcmd);
+  Serial.print("\tRcmd= ");
+  Serial.println(Rcmd);*/
+
+  /*if (Rerror>0 && Lerror>0){
+    motorR(82);
+    motorL(92);
+    }
+    else
+     if(Rerror>0){
+        motorR(82);
+        motorL(0);
+      }
+      else
+        if (Lerror>0){
+          motorR(0);
+          motorL(92);
+        }
+        else{
+          motorR(0);
+          motorL(0);
+        }*/
+}

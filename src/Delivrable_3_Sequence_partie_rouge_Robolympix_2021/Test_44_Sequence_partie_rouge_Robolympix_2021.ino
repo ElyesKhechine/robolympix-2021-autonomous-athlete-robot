@@ -1,0 +1,1196 @@
+#include <Servo.h>
+#include <TimerOne.h>
+#define RF 4 // 6
+#define RB 5  //5
+#define LB 6  //4
+#define LF 7   //2
+//stepper
+Servo Rservo;
+Servo Lservo;
+Servo Pservo;
+const int stepPin = 11; //clk ;
+const int dirPin = 2; //clw ;
+const int enPin = 53; //en ;
+
+
+
+
+int encoderLB = 21;//21
+int encoderLA = 20;//20
+int encoderRA = 18;//19//left
+int encoderRB = 19;//18
+double R = 40.4;// par calcul 40.4
+double tasli7angle = 0;
+double encoder_ticks = 400;//1633.25;//600  1024
+double precision = 4;
+double distR = 0;
+double distL = 0;
+
+double distRn = 0;
+double distLn = 0;
+
+double dist = 0;
+long  encoderRPos = 0;
+long lastEncoderRPos = 0;
+boolean encoderRA_set = false;
+boolean encoderRB_set = false;
+long  encoderLPos = 0;
+long lastEncoderLPos = 0;
+boolean encoderLA_set = false;
+boolean encoderLB_set = false;
+double diffprec = 0;
+volatile double diff = 0;
+double tasli7 = 0;
+volatile double thetaprimeL = 0;
+volatile double thetaprime = 0;
+volatile int modthetaprime = 0;
+volatile int modthetaprimeL = 0;
+volatile double theta = 0;
+int error = 0;
+int d = 0;
+int erreur = 0;
+int motorspeed = 0;
+double distance_tick = (2 * PI*R) / (encoder_ticks*precision);
+
+
+void up()
+{
+  delay(500);
+  digitalWrite(dirPin, HIGH); // Enables the motor to move in a particular direction
+  // Makes 200 pulses for making one full cycle rotation
+  for (int x = 0; x < 1200; x++) {
+    digitalWrite(stepPin, HIGH);
+    delayMicroseconds(500);
+    digitalWrite(stepPin, LOW);
+    delayMicroseconds(500);
+  }
+  delay (1000);
+}
+void down () {
+  digitalWrite(dirPin, LOW); //Changes the rotations direction
+  // Makes 400 pulses for making two full cycle rotation
+  for (int x = 0; x < 1000; x++) {
+    digitalWrite(stepPin, HIGH);
+    delayMicroseconds(500);
+    digitalWrite(stepPin, LOW);
+    delayMicroseconds(500);
+  }
+  delay(1000);
+}
+void downchwaya () {
+  digitalWrite(dirPin, LOW); //Changes the rotations direction
+  // Makes 400 pulses for making two full cycle rotation
+  for (int x = 0; x < 200; x++) {
+    digitalWrite(stepPin, HIGH);
+    delayMicroseconds(500);
+    digitalWrite(stepPin, LOW);
+    delayMicroseconds(500);
+  }
+  delay(1000);
+}
+
+
+void forward(int x, int y) {
+  analogWrite(LF, y);
+  analogWrite(RF, x);
+  analogWrite(RB, 0);
+
+  analogWrite(LB, 0);
+}
+void backward(int x, int y) {
+  analogWrite(RF, 0);
+  analogWrite(RB, x);
+  analogWrite(LF, 0);
+  analogWrite(LB, y);
+}
+void left(int x, int y) {
+  analogWrite(RF, x);
+  analogWrite(RB, 0);
+  analogWrite(LF, 0);
+  analogWrite(LB, y);
+}
+void right(int x, int y) {
+  analogWrite(RF, 0);
+  analogWrite(RB, x);
+  analogWrite(LF, y);
+  analogWrite(LB, 0);
+}
+void stoop() {
+  analogWrite(RF, 0);
+  analogWrite(RB, 0);
+  analogWrite(LF, 0);
+  analogWrite(LB, 0);
+}
+
+// right
+void countEncoderLA() {
+  encoderLA_set = digitalRead(encoderLA) == HIGH;
+  encoderLPos += (encoderLA_set == encoderLB_set) ? -1 : +1;
+  distL += (encoderLA_set == encoderLB_set) ? -distance_tick : +distance_tick;
+  distLn += (encoderLA_set == encoderLB_set) ? -distance_tick : +distance_tick;
+}
+
+void countEncoderLB() {
+  encoderLB_set = digitalRead(encoderLB) == HIGH;
+  encoderLPos += (encoderLA_set != encoderLB_set) ? -1 : +1;
+  distL += (encoderLA_set != encoderLB_set) ? -distance_tick : +distance_tick;
+  distLn += (encoderLA_set != encoderLB_set) ? -distance_tick : +distance_tick;
+}
+
+// left
+void countEncoderRA() {
+  encoderRA_set = digitalRead(encoderRA) == HIGH;
+  encoderRPos += (encoderRA_set == encoderRB_set) ? -1 : +1;
+  distR += (encoderRA_set == encoderRB_set) ? -distance_tick : +distance_tick;
+  distRn += (encoderRA_set == encoderRB_set) ? -distance_tick : +distance_tick;
+}
+
+void countEncoderRB() {
+  encoderRB_set = digitalRead(encoderRB) == HIGH;
+  encoderRPos += (encoderRA_set != encoderRB_set) ? -1 : +1;
+  distR += (encoderRA_set != encoderRB_set) ? -distance_tick : +distance_tick;
+  distRn += (encoderRA_set != encoderRB_set) ? -distance_tick : +distance_tick;
+}
+double entreaxe = 298.5;
+double current_distR = 0;
+double current_distL = 0;
+double last_distR = 0;
+double last_distL = 0;
+double dR = 0;
+double dL = 0;
+double angle = 0;
+
+double current_distRn = 0;
+double current_distLn = 0;
+double last_distRn = 0;
+double last_distLn = 0;
+double dRn = 0;
+double dLn = 0;
+double anglen = 0;
+
+volatile double difference = 0;
+volatile double ddiff = 0;
+volatile double diffa = 0;
+double lastdiff = 0;
+volatile double idiff = 0;
+
+void function() {
+  current_distR = distR;
+  current_distL = distL;
+  dR = current_distR - last_distR;
+  dL = current_distL - last_distL;
+  angle += ((dR - dL) / entreaxe);
+
+  current_distRn = distRn;
+  current_distLn = distLn;
+  dRn = current_distRn - last_distRn;
+  dLn = current_distLn - last_distLn;
+  anglen += ((dRn - dLn) / entreaxe);
+  thetaprime = (anglen * 180) / PI;
+  modthetaprime = ((int)thetaprime) % (360);
+
+  thetaprimeL = (((anglen * 180) / PI) - 360);
+  modthetaprimeL = ((int)thetaprimeL) % (360);
+
+
+  theta = (angle * 180) / PI;
+  diffa = distR + distL;
+  diff = distR - distL;
+  ddiff = diff - lastdiff;
+  lastdiff = diff;
+  last_distR = current_distR;
+  last_distL = current_distL;
+  last_distRn = current_distRn;
+  last_distLn = current_distLn;
+  idiff = idiff + diff;
+}
+void wassimm(float d) {
+
+  idiff = 0;
+  diff = 0;
+  ddiff = 0;
+  theta = 0;
+
+  float kp = 2.55;
+  float kd = 8;
+  float ki = 0.010;
+  /* float kp = 2.81;
+    float kd = 8;
+    float ki = 0.0048;*/
+  distR = 0;
+  distL = 0;
+  erreur = 0;
+  float motorspeed = 0;
+  dist = (distR + distL) / 2;
+  erreur = d - dist;
+  while (erreur >= 2) {
+
+    dist = (distR + distL) / 2;
+    erreur = ((d * 9) / 10) - dist;
+    Serial.println(erreur);
+    Serial.print("theta =");
+    Serial.println(thetaprime);
+    Serial.print("distRn ");
+    Serial.println(distRn);
+
+    Serial.print("distLn ");
+    Serial.println(distLn);
+    //diff = distR - distL ;
+
+    tasli7 = kp * diff + kd * ddiff + ki * idiff ;
+    if (abs(dist) <= 50) {
+      motorspeed = 0.3 * abs(dist) + 135 ;
+
+    }
+    else if ((abs(dist) >= ((abs(d) * 6) / 10) && (abs(dist) < abs(d)))) {
+      motorspeed = (-330 / abs(d)) * abs(dist) + 375;
+      if (motorspeed < 105)
+        motorspeed = 105;
+    }
+
+    else if (abs(dist) >= abs( d))
+      motorspeed = 100;
+
+    else motorspeed = 150;
+
+    if (erreur >= 2) {
+      if (diff >= 0) {
+        forward(constrain(motorspeed + 15, 0, 200), constrain(motorspeed + tasli7, 0, 200));
+      }
+      else {
+        forward(constrain(motorspeed + 15 - tasli7, 0, 200), constrain(motorspeed, 0, 200));
+      }
+
+    }
+    else if (erreur <= -2) {
+      motorspeed = 100;
+      // d-dist
+      if (diff >= 0) {
+        backward( constrain(motorspeed + tasli7 + 5, 0, 180) , constrain(motorspeed, 0, 180));
+        //   Serial.println("5");
+      }
+      else
+      { backward(constrain(motorspeed + 5, 0, 180), constrain(motorspeed - tasli7, 0, 180));
+      }
+    }
+  }
+  long t = millis();
+  long i = 0;
+  dist = (distR + distL) / 2;
+  /************/
+  erreur = d - dist;
+  while (i = millis() < (t + 1200)) {
+    dist = (distR + distL) / 2;
+    erreur = d - dist;
+    Serial.println(erreur);
+
+    //diff = distR - distL ;
+    tasli7 = kp * diff + kd * ddiff + ki * idiff;
+    motorspeed = 140;
+    if (erreur >= 2) {
+      if (diff >= 0) {
+        forward(constrain(motorspeed + 15, 0, 200), constrain(motorspeed + tasli7, 0, 200));
+      }
+      else {
+        forward(constrain(motorspeed + 15 - tasli7, 0, 200), constrain(motorspeed, 0, 200));
+      }
+    }
+    else if (erreur <= -2) {
+      //motorspeed = 100;
+      // d-dist
+      if (diff >= 0) {
+        backward( constrain(motorspeed + tasli7 + 5, 0, 180), constrain(motorspeed, 0, 180));
+        //   Serial.println("5");
+      }
+      else
+      { backward(constrain(motorspeed + 5, 0, 180), constrain(motorspeed - tasli7, 0, 180));
+        // Serial.println("6");
+      }
+    }
+    else
+      stoop();
+
+  }
+  long  tt = millis();
+  long j = 0;
+  while (j = millis() <= (tt + 1200)) {
+    Serial.println(erreur);
+    if (theta >= 1) {
+      analogWrite(RF, 0);
+      analogWrite(RB, 150);
+      analogWrite(LF, 150);
+      analogWrite(LB, 0);
+    }
+    else if (theta <= -1) {
+
+      analogWrite(RF, 150);
+      analogWrite(RB, 0);
+      analogWrite(LF, 0);
+      analogWrite(LB, 150);
+    }
+    else
+      stoop();
+  }
+
+
+  stoop();
+
+}
+
+void wassimmrozn(float d) {
+  idiff = 0;
+  diff = 0;
+  ddiff = 0;
+  theta = 0;
+  float kp = 2.82;
+  float kd = 7.815;
+  float ki = 0.004738;
+  distR = 0;
+  distL = 0;
+  erreur = 0;
+  float motorspeed = 0;
+  dist = (distR + distL) / 2;
+  erreur = d - dist;
+  while (erreur >= 2) {
+    dist = (distR + distL) / 2;
+    erreur = ((d * 9) / 10) - dist;
+    //diff = distR - distL ;
+    Serial.println(erreur);
+
+    tasli7 = kp * diff + kd * ddiff + ki * idiff ;
+    if (abs(dist) <= 50) {
+      motorspeed = 0.6 * abs(dist) + 140 ;
+      // Serial.println("1");
+    }
+    else if ((abs(dist) >= ((d * 6) / 10) && (abs(dist) < d))) {
+      motorspeed = (-275 / d) * abs(dist) + 375;
+      if (motorspeed < 115)
+        motorspeed = 115;
+    }
+
+    else if (abs(dist) >= d)
+      motorspeed = 100;
+
+    else motorspeed = 170;
+
+    if (erreur >= 2) {
+      if (diff >= 0) {
+        forward(constrain(motorspeed + 15, 0, 210), constrain(motorspeed + tasli7, 0, 210));
+      }
+      else {
+        forward(constrain(motorspeed + 15 - tasli7, 0, 210), constrain(motorspeed, 0, 210));
+      }
+
+    }
+    else if (erreur <= -2) {
+      motorspeed = 110;
+      // d-dist
+      if (diff >= 0) {
+        backward( constrain(motorspeed + tasli7 + 5, 0, 180) , constrain(motorspeed, 0, 180));
+        //   Serial.println("5");
+      }
+      else
+      { backward(constrain(motorspeed + 5, 0, 180), constrain(motorspeed - tasli7, 0, 180));
+      }
+    }
+  }
+  long t = millis();
+  long i = 0;
+  dist = (distR + distL) / 2;
+  /************/
+  erreur = d - dist;
+  while (i = millis() < (t + 1200)) {
+    dist = (distR + distL) / 2;
+    erreur = d - dist;
+    Serial.println(erreur);
+    //diff = distR - distL ;
+    tasli7 = kp * diff + kd * ddiff + ki * idiff;
+    motorspeed = 140;
+    if (erreur >= 2) {
+      if (diff >= 0) {
+        forward(constrain(motorspeed + 15, 0, 210), constrain(motorspeed + tasli7, 0, 210));
+      }
+      else {
+        forward(constrain(motorspeed + 15 - tasli7, 0, 210), constrain(motorspeed, 0, 210));
+      }
+    }
+    else if (erreur <= -2) {
+      //motorspeed = 100;
+      // d-dist
+      if (diff >= 0) {
+        backward( constrain(motorspeed + tasli7 + 5, 0, 180), constrain(motorspeed, 0, 180));
+        //   Serial.println("5");
+      }
+      else
+      { backward(constrain(motorspeed + 5, 0, 180), constrain(motorspeed - tasli7, 0, 180));
+        // Serial.println("6");
+      }
+    }
+    else
+      stoop();
+
+  }
+  long  tt = millis();
+  long j = 0;
+  while (j = millis() <= (tt + 1000)) {
+    Serial.println(erreur);
+    if (theta >= 1) {
+      analogWrite(RF, 0);
+      analogWrite(RB, 150);
+      analogWrite(LF, 150);
+      analogWrite(LB, 0);
+    }
+    else if (theta <= -1) {
+
+      analogWrite(RF, 150);
+      analogWrite(RB, 0);
+      analogWrite(LF, 0);
+      analogWrite(LB, 150);
+    }
+    else
+      stoop();
+  }
+
+
+  stoop();
+
+}
+
+
+
+void doura ( int angle ) {
+  float deg = 0.3;
+  float motorspeed = 160;
+  distR = 0;
+  distL = 0;
+  theta = 0;
+  int kpang = 5;
+  float erreur = angle - theta;
+  float tasli7angle = 0;
+
+  while ((erreur > deg) || (erreur < -deg)) {
+
+    Serial.println(theta);
+
+    Serial.print("theta =");
+    Serial.println(thetaprime);
+
+    Serial.print("distRn ");
+    Serial.println(distRn);
+
+    Serial.print("distLn ");
+    Serial.println(distLn);
+    erreur = angle - theta;
+    tasli7angle = kpang * diffa;
+    if (erreur >= 0) {
+      if (diffa > 0) {
+        left(constrain(motorspeed - tasli7angle, 0, 255), constrain(motorspeed, 0, 255) );
+
+      }
+      else
+        left( constrain(motorspeed, 0, 255), constrain(motorspeed + tasli7angle, 0, 255));
+
+    }
+    else {
+      if (diffa > 0) {
+        right( constrain(motorspeed, 0, 255), constrain(motorspeed - tasli7angle, 0, 255));
+
+      }
+      else {
+
+        right(constrain(motorspeed + tasli7angle, 0, 255),  constrain(motorspeed, 0, 255) );
+        //Serial.println(tasli7angle);
+      }
+    }
+
+  }
+  erreur = angle - theta;
+  long t = millis();
+  long i = 0;
+  while (i = millis() < (t + 800)) {
+    Serial.println(erreur);
+    erreur = angle - theta;
+    if (erreur >= 0.5) {
+      left(150, 150);
+    }
+    else if (erreur <= -0.5) {
+
+      right(150, 150);
+    }
+    else
+      stoop();
+
+  }
+
+
+  stoop();
+}
+
+
+void tawkhir(float d) {
+
+  idiff = 0;
+  diff = 0;
+  ddiff = 0;
+  theta = 0;
+
+  float kp = 2.55;
+  float kd = 6;
+  float ki = 0;
+  /* float kp = 2.81;
+    float kd = 8;
+    float ki = 0.0048;*/
+  distR = 0;
+  distL = 0;
+  erreur = 0;
+  float motorspeed = 0;
+  dist = (distR + distL) / 2;
+  erreur = d - dist;
+  while (abs(erreur) >= 2) {
+
+    dist = (distR + distL) / 2;
+    erreur = ((d * 9) / 10) - dist;
+    Serial.println(erreur);
+    Serial.print("theta =");
+    Serial.println(thetaprime);
+    Serial.print("distRn ");
+    Serial.println(distRn);
+
+    Serial.print("distLn ");
+    Serial.println(distLn);
+    //diff = distR - distL ;
+
+    tasli7 = kp * diff + kd * ddiff + ki * idiff ;
+    if (abs(dist) <= 50) {
+      motorspeed = 0.3 * abs(dist) + 135 ;
+
+    }
+    else if ((abs(dist) >= ((abs(d) * 6) / 10) && (abs(dist) < abs(d)))) {
+      motorspeed = (-350 / abs(d)) * abs(dist) + 375;
+      if (motorspeed < 105)
+        motorspeed = 105;
+    }
+
+    else if (abs(dist) >= abs( d))
+      motorspeed = 100;
+
+    else motorspeed = 150;
+
+    if (erreur >= 2) {
+      motorspeed = 100;
+      if (diff >= 0) {
+        forward(constrain(motorspeed + 15, 0, 180), constrain(motorspeed + tasli7, 0, 180));
+      }
+      else {
+        forward(constrain(motorspeed + 15 - tasli7, 0, 180), constrain(motorspeed, 0, 180));
+      }
+
+    }
+    else if (erreur <= -2) {
+      // d-dist
+      if (diff >= 0) {
+        backward( constrain(motorspeed + tasli7, 0, 200) , constrain(motorspeed, 0, 200));
+        //   Serial.println("5");
+      }
+      else
+      { backward(constrain(motorspeed , 0, 200), constrain(motorspeed - tasli7, 0, 200));
+      }
+    }
+  }
+  long t = millis();
+  long i = 0;
+  dist = (distR + distL) / 2;
+  /************/
+  erreur = d - dist;
+  while (i = millis() < (t + 1200)) {
+    dist = (distR + distL) / 2;
+    erreur = d - dist;
+    Serial.println(erreur);
+
+    //diff = distR - distL ;
+    tasli7 = kp * diff + kd * ddiff + ki * idiff;
+    motorspeed = 120;
+    if (erreur >= 2) {
+      if (diff >= 0) {
+        forward(constrain(motorspeed + 15, 0, 180), constrain(motorspeed + tasli7, 0, 180));
+      }
+      else {
+        forward(constrain(motorspeed + 15 - tasli7, 0, 180), constrain(motorspeed, 0, 180));
+      }
+    }
+    else if (erreur <= -2) {
+      //motorspeed = 100;
+      // d-dist
+      if (diff >= 0) {
+        backward( constrain(motorspeed + tasli7, 0, 200), constrain(motorspeed, 0, 200));
+        //   Serial.println("5");
+      }
+      else
+      { backward(constrain(motorspeed, 0, 200), constrain(motorspeed - tasli7, 0, 200));
+        // Serial.println("6");
+      }
+    }
+    else
+      stoop();
+
+  }
+  long  tt = millis();
+  long j = 0;
+  while (j = millis() <= (tt + 1000)) {
+    Serial.println(erreur);
+    if (theta >= 1) {
+      analogWrite(RF, 0);
+      analogWrite(RB, 150);
+      analogWrite(LF, 150);
+      analogWrite(LB, 0);
+    }
+    else if (theta <= -1) {
+
+      analogWrite(RF, 150);
+      analogWrite(RB, 0);
+      analogWrite(LF, 0);
+      analogWrite(LB, 150);
+    }
+    else
+      stoop();
+  }
+
+
+  stoop();
+
+}
+
+void dourarzina ( int angle ) {
+  float deg = 0.3;
+  float motorspeed = 200;
+  distR = 0;
+  distL = 0;
+  theta = 0;
+  int kpang = 5;
+  float erreur = angle - theta;
+  float tasli7angle = 0;
+
+  while ((erreur > deg) || (erreur < -deg)) {
+
+    Serial.println(theta);
+
+    Serial.print("theta =");
+    Serial.println(thetaprime);
+
+    Serial.print("distRn ");
+    Serial.println(distRn);
+
+    Serial.print("distLn ");
+    Serial.println(distLn);
+    erreur = angle - theta;
+    tasli7angle = kpang * diffa;
+    if (erreur >= 0) {
+      if (diffa > 0) {
+        left(constrain(motorspeed - tasli7angle, 0, 255), constrain(motorspeed, 0, 255) );
+
+      }
+      else
+        left( constrain(motorspeed, 0, 255), constrain(motorspeed + tasli7angle, 0, 255));
+
+    }
+    else {
+      if (diffa > 0) {
+        right( constrain(motorspeed, 0, 255), constrain(motorspeed - tasli7angle, 0, 255));
+
+      }
+      else {
+
+        right(constrain(motorspeed + tasli7angle, 0, 255),  constrain(motorspeed, 0, 255) );
+        //Serial.println(tasli7angle);
+      }
+    }
+
+  }
+  erreur = angle - theta;
+  long t = millis();
+  long i = 0;
+  while (i = millis() < (t + 800)) {
+    Serial.println(erreur);
+    erreur = angle - theta;
+    if (erreur >= 0.5) {
+      left(160, 160);
+    }
+    else if (erreur <= -0.5) {
+
+      right(160, 160);
+    }
+    else
+      stoop();
+
+  }
+
+
+  stoop();
+}
+
+
+
+
+
+
+void orientation() {
+  long  tt = millis();
+  long j = 0;
+  while (j = millis() <= (tt + 1200)) {
+    Serial.println(erreur);
+    if (thetaprime >= 0.5) {
+      analogWrite(RF, 0);
+      analogWrite(RB, 150);
+      analogWrite(LF, 150);
+      analogWrite(LB, 0);
+    }
+    else if (thetaprime <= -0.5) {
+
+      analogWrite(RF, 150);
+      analogWrite(RB, 0);
+      analogWrite(LF, 0);
+      analogWrite(LB, 150);
+    }
+    else
+      stoop();
+  }
+}
+void orientationL() {
+  long  tt = millis();
+  long j = 0;
+  while (j = millis() <= (tt + 1200)) {
+    Serial.println(erreur);
+    if (thetaprimeL >= 0.5) {
+      analogWrite(RF, 0);
+      analogWrite(RB, 150);
+      analogWrite(LF, 150);
+      analogWrite(LB, 0);
+    }
+    else if (thetaprimeL <= -0.5) {
+
+      analogWrite(RF, 150);
+      analogWrite(RB, 0);
+      analogWrite(LF, 0);
+      analogWrite(LB, 150);
+    }
+    else
+      stoop();
+  }
+}
+
+
+
+void panneauR() {
+ Rservo.detach();
+  Lservo.detach();
+  delay(50);
+  doura(-90);
+  stoop();
+  delay(10);
+
+
+  wassimm(860);//860
+  stoop();
+  delay(10);
+
+  doura(180);
+  stoop();
+  delay(10);
+  Pservo.attach(46);
+  Pservo.write(20);
+  delay(300);
+  /*wassimm(150);
+  stoop();
+  delay(10);*/
+  Pservo.write(160);
+  delay(20);
+
+  wassimm(420);
+  stoop();
+  delay(10);
+  Pservo.write(20);
+  delay(300);
+  /*wassimm(150);
+  stoop();
+delay(10);*/
+  Pservo.write(180);
+  delay(20);
+
+
+
+  wassimm(425);//435
+  stoop();
+  delay(10);
+
+
+
+  doura(-90);
+  stoop();
+  delay(10);
+  Pservo.detach();
+  delay(20);
+
+}
+
+void panneauL() {
+   Rservo.detach();
+  Lservo.detach();
+  delay(50);
+  doura(90);
+  stoop();
+  delay(10);
+
+
+  wassimm(430);//850
+  stoop();
+  delay(10);
+  Pservo.attach(46);
+  Pservo.write(20);
+  delay(300);
+  /*wassimm(100);
+  stoop();
+  delay(10);*/
+  Pservo.write(160);
+  delay(20);
+
+  wassimm(400);//850
+  stoop();
+  delay(10);
+  Pservo.attach(46);
+  Pservo.write(20);
+  delay(300);
+  /*wassimm(100);
+  stoop();
+  delay(10);*/
+  Pservo.write(160);
+  delay(20);
+
+
+
+
+  doura(180);
+  stoop();
+  delay(10);
+
+
+  wassimm(840);
+  stoop();
+  delay(10);
+
+
+
+
+  doura(90);
+  stoop();
+  delay(20);
+  Pservo.detach();
+  delay(10);
+}
+
+
+//taskir les servos
+
+void closeServos() {
+
+  // left yethal fil 23 yetsaker fil 95
+
+
+  Rservo.attach(52);
+  Lservo.attach(48);
+  delay(10);
+  Rservo.write(24);
+  Lservo.write(95);
+  delay(300);
+  /*
+  Rservo.detach();
+  Lservo.detach();
+  delay(50);*/
+
+}
+
+
+//halen les servos
+void openServos() {
+
+  Rservo.attach(52);
+  Lservo.attach(48);
+  delay(50);
+  Rservo.write(150);
+  Lservo.write(23);
+  delay(300);
+  Rservo.detach();
+  Lservo.detach();
+  delay(50);
+
+}
+void systemeKbirL () {
+
+  //yethalou
+  openServos();
+
+  //yemchi
+  wassimm(395);
+  stoop();
+  delay(10);
+  orientationL();
+  stoop();
+  delay(20);
+
+  //yetsakrou
+  closeServos();
+
+  // yatla3
+  digitalWrite(enPin, LOW);
+  delay(10);
+   up();
+
+  //yemchi yorzon
+  wassimm(420);
+  stoop();
+  delay(20);
+
+  orientationL();
+  stoop();
+  delay(20);
+
+  // yahat chwaya
+  downchwaya();
+  
+
+
+  //yethalou
+  openServos();
+
+  tawkhir(-20);
+  stoop();
+  delay(20);
+
+  //yahbat
+  down();
+ 
+
+  wassimmrozn(750);
+  stoop();
+  delay(10);
+  orientationL();
+  stoop();
+  delay(20);
+
+
+
+  Serial.println("theta prime= ");
+  Serial.print(thetaprime);
+}
+//rouge
+void systemeKbir () {
+
+  //yethalou
+  openServos();
+
+  //yemchi
+  wassimm(395);
+  stoop();
+  delay(10);
+  orientation();
+  stoop();
+  delay(20);
+
+  //yetsakrou
+  closeServos();
+
+  // yatla3
+  digitalWrite(enPin, LOW);
+  delay(10);
+  up();
+ 
+
+  //yemchi yorzon
+  wassimm(420);
+  stoop();
+  delay(20);
+
+  orientation();
+  stoop();
+  delay(20);
+
+  // yahat chwaya
+  downchwaya();
+ 
+
+
+  //yethalou
+  openServos();
+
+  tawkhir(-20);
+  stoop();
+  delay(20);
+
+  //yahbat
+  down();
+ 
+
+  wassimmrozn(750);
+  stoop();
+  delay(10);
+  orientation();
+  stoop();
+  delay(20);
+
+
+
+  Serial.println("theta prime= ");
+  Serial.print(thetaprime);
+}
+
+
+void cylindre () {
+  tawkhir(-200);
+  stoop();
+  delay(10);
+  closeServos();
+  doura(-90);
+  stoop();
+  delay(10);
+
+  wassimm(370);
+  stoop();
+  delay(10);
+
+  doura(90);
+  stoop();
+  delay(10);
+
+  Lservo.attach(48);
+  delay(10);
+  Lservo.write(25);
+  delay(50);
+  Lservo.detach();
+  delay(20);
+  wassimm(230);
+  stoop();
+  delay(10);
+
+  dourarzina(-90);
+  stoop();
+  delay(10);
+  Lservo.attach(48);
+  delay(10);
+  Lservo.write(120);
+  delay(20);
+  wassimm(500);
+  stoop();
+
+}
+
+
+void cylindreL() {
+  tawkhir(-200);
+  stoop();
+  delay(10);
+  closeServos();
+  doura(90);
+  stoop();
+  delay(20);
+
+  wassimm(370);
+  stoop();
+  delay(20);
+
+  doura(-90);
+  stoop();
+  delay(10);
+  Rservo.attach(52);
+
+  delay(50);
+  Rservo.write(150);
+
+  delay(350);
+
+
+
+  wassimm(150);
+  stoop();
+  delay(20);
+
+  dourarzina(90);
+  delay(20);
+
+  Rservo.write(0);
+  delay(100);
+
+  wassimm(200);
+  stoop();
+
+}
+
+
+void setup() {
+
+  pinMode(12, INPUT_PULLUP);
+
+
+
+
+  Serial.begin(9600);
+  pinMode(RF, OUTPUT);
+  pinMode(RB, OUTPUT);
+  pinMode(LF, OUTPUT);
+  pinMode(LB, OUTPUT);
+
+  //RIGHT
+  pinMode(encoderLA, INPUT);
+  pinMode(encoderLB, INPUT);
+  digitalWrite(encoderLA, HIGH);
+  digitalWrite(encoderLB, HIGH);
+  attachInterrupt(3, countEncoderLA, CHANGE);
+  attachInterrupt(2, countEncoderLB, CHANGE);
+
+  //LEFT
+  pinMode(encoderRA, INPUT);
+  pinMode(encoderRB, INPUT);
+  digitalWrite(encoderRA, HIGH);
+  digitalWrite(encoderRB, HIGH);
+  attachInterrupt(5, countEncoderRA, CHANGE);
+  attachInterrupt(4, countEncoderRB, CHANGE);
+  Timer1.initialize(5000);
+  Timer1.attachInterrupt(function);
+
+
+  pinMode(stepPin, OUTPUT);
+  pinMode(dirPin, OUTPUT);
+  pinMode(enPin, OUTPUT);
+
+  digitalWrite(enPin, HIGH); // kenet low
+  
+  digitalWrite(enPin, LOW);
+
+
+    closeServos();
+panneauR();
+systemeKbir();
+cylindre();
+
+
+  
+  
+/*
+  closeServos();
+panneauL();
+systemeKbirL();
+cylindreL();
+
+
+*/
+
+
+
+}
+
+
+void loop() {
+  /*
+    Serial.print("distR ");
+    Serial.println(distR);
+    Serial.print("distL ");
+    Serial.println(distL);*/
+}

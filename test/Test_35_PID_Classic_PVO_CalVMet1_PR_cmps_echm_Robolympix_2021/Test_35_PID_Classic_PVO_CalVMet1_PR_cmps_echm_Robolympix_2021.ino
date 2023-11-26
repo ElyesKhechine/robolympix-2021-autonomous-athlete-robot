@@ -1,0 +1,444 @@
+
+#include <SimpleTimer.h>
+#include <util/atomic.h>
+
+//Variables temps
+volatile double Te = maxdt * 2; //ms
+volatile unsigned long t0Ri=0,t0Li=0,t1Ri=0,t1Li=0;
+volatile double dtRi=0,dtLi=0;
+volatile unsigned long t0R=0,t0L=0,t1R=0,t1L=0,t0=0,t1=0,t2=0,t=0;
+volatile double prevdtL=0,prevdtR=0,dtR=0,dtL=0,dt=0, mindtL=88/1.0e6, mindtR=68/1.0e6,mindt=96/1.0e6,maxdtL=31620/1.0e6, maxdtR=39072/1.0e6,maxdt=136884/1.0e6;
+SimpleTimer timer;
+
+//Variables stop
+volatile boolean stopR=true, stopL=true;
+
+//Variables encodeurs
+#define outputAR 2
+#define outputBR 3
+#define outputAL 18
+#define outputBL 19
+volatile double Rdist = 0;
+volatile double Ldist = 0;
+volatile double margePRdist= 0.3;
+volatile double margeNRdist= -0.3;
+volatile double margePLdist= 0.3;
+volatile double margeNLdist= -0.3;
+volatile double Rdisti = 0;
+volatile double Ldisti = 0;
+volatile double prevRdist = 0;
+volatile double prevLdist = 0;
+volatile double prevRdisti = 0;
+volatile double prevLdisti = 0;
+volatile double KR= (1024*2) / (PI*(8/1.0e2));
+volatile double KL= (600*2) / (PI*(8/1.0e2));
+volatile double distUnitR = (double)PI * 4 / 1024;
+volatile double distUnitL = (double)PI * 4 / 600; 
+volatile double nb_imp_par_periode_R=0;
+volatile double nb_imp_par_periode_L=0;
+
+//Variables moteurs
+#define forwardR 8
+#define backwardR 9
+#define forwardL 10
+#define backwardL 11
+volatile double pwmR = 0 ;
+volatile double pwmL = 0 ;
+volatile double vitesseLact = 0;
+volatile double vitesseRact = 0;
+volatile double vitesseL = 0;
+volatile double vitesseLacti = 0;
+volatile double vitesseRacti = 0;
+volatile double vitesseLactFilter = 0;
+volatile double vitesseRactFilter = 0;
+volatile double prevVRact = 0;
+volatile double prevVLact = 0;
+volatile double pwmRmax = 180;
+volatile double pwmLmax = 180;
+volatile double pwmRmin = 72;
+volatile double pwmLmin = 72;
+
+
+//Variables erreurs/commandes PIDposition
+volatile double Rdistacc=0;
+volatile double Ldistacc=0;
+volatile double Rdistdec=0;
+volatile double Ldistdec=0;
+volatile double PIDR=0;
+volatile double PIDL=0;
+volatile double Rcmd = 0;
+volatile double Lcmd = 0; 
+volatile double Rerror= 0;
+volatile double Lerror= 0;
+volatile double margePRerror= 0.5;
+volatile double margeNRerror= -0.5;
+volatile double margePLerror= 0.5;
+volatile double margeNLerror= -0.5;
+volatile double prevRerror = 0;
+volatile double prevLerror = 0;
+volatile double sommeRerror = 0;
+volatile double sommeLerror = 0;
+volatile double dRerror=0;
+volatile double dLerror=0;
+
+//Variables erreurs/commandes PIDvitesse
+volatile double PIDVR=0;
+volatile double PIDVL=0;
+volatile double vitesseRcmd=0;
+volatile double vitesseLcmd=0;
+volatile double vitesseOcmd=0;
+volatile double vitesseRcmdmax=pwmRmax/4;
+volatile double vitesseRcmdmin=pwmRmin/4;
+volatile double vitesseLcmdmax=pwmLmax/4;
+volatile double vitesseLcmdmin=pwmLmin/4;
+volatile double VLerror = 0;
+volatile double VRerror = 0;
+volatile double margePVRerror = 0.2;
+volatile double margeNVRerror = -0.2;
+volatile double margePVLerror = 0.2;
+volatile double margeNVLerror = -0.2;
+volatile double prevVLerror = 0;
+volatile double prevVRerror = 0;
+volatile double sommeVLerror = 0;
+volatile double sommeVRerror = 0;
+volatile double dVRerror=0;
+volatile double dVLerror=0;
+
+
+//Variables PID orientation
+volatile double pwmO = 0 ;
+volatile double Oerror=0;
+volatile double margePOerror=0.2;
+volatile double margeNOerror=-0.2;
+volatile double prevOerror = 0;
+volatile double sommeOerror = 0;
+volatile double dOerror=0;
+
+bool inRange(volatile double val, volatile double minimum, volatile double maximum){
+  return ((minimum <= val) && (val <= maximum));
+}
+
+//Encoder functions
+void ISRtrackAR() {
+  Rdisti += (digitalRead(outputBR) == LOW) ? distUnitR : -distUnitR;
+  t1Ri=micros();
+  dtRi=((double) (t1Ri-t0Ri))/1.0e6;
+  t0Ri=t1Ri;
+}
+void ISRtrackBR() {
+  Rdisti += (digitalRead(outputAR) == LOW) ? -distUnitR : distUnitR;
+  t1Ri=micros();
+  dtRi=((double) (t1Ri-t0Ri))/1.0e6;
+  t0Ri=t1Ri;
+}
+
+void ISRtrackAL() {
+  Ldisti += ((digitalRead(outputBL) == LOW)) ? -distUnitL :  distUnitL;
+  t1Li=micros();
+  dtLi=((double) (t1Li-t0Li))/1.0e6;
+  t0Li=t1Li;
+}
+
+void ISRtrackBL() {
+  Ldisti += ((digitalRead(outputAL) == LOW)) ? distUnitL :  -distUnitL;
+  t1Li=micros();
+  dtLi=((double) (t1Li-t0Li))/1.0e6;
+  t0Li=t1Li;
+}
+
+//Motor functions
+void motorR(volatile double vR) {
+  if (vR > 0) {
+    analogWrite(forwardR, vR);
+    analogWrite(backwardR, 0);
+  }
+  else {
+    analogWrite(forwardR, 0);
+    analogWrite(backwardR, -vR); //5.2
+  }
+}
+
+void motorL(volatile double vL) {
+  if (vL > 0) {
+    analogWrite(forwardL, vL);
+    analogWrite(backwardL, 0);
+  }
+  else {
+    analogWrite(forwardL, 0);
+    analogWrite(backwardL, -vL); //5.2
+  }
+}
+
+//PID Position Parameters
+
+volatile double kpR = 0;
+volatile double kpL = 0;
+
+volatile double kdR = 0;
+volatile double kdL = 0;
+
+volatile double kiR = 0;
+volatile double kiL = 0;
+
+
+//PID vitesse Parameters
+
+volatile double kpVR = 0;
+volatile double kpVL = 1;
+
+volatile double kdVR = 0; 
+volatile double kdVL = 0; 
+
+volatile double kiVR = 0; 
+volatile double kiVL = 0;
+
+//PID orientation Parameters
+
+volatile double kpO = 0;
+volatile double kdO = 0;
+volatile double kiO = 0;
+
+float aR=15; // cm / s²
+float aL=15; // cm / s²
+
+
+void PIDvitesseR() {
+  if (!inRange(VRerror,margeNVRerror,margePVRerror) && !inRange(Rerror,margeNRerror,margePRerror)){
+    sommeVRerror+=(double) VRerror / (2 * dt/Te);
+    dVRerror=(double) (VRerror - prevVRerror) / dt/Te;
+    prevVRerror = VRerror;
+    PIDVR = (double) (kpVR * VRerror) + (kdVR * dVRerror) + kiVR * sommeVRerror; 
+    vitesseRcmd= constrain(PIDVR,vitesseRcmdmin,vitesseRcmdmax);
+  }
+  else
+    vitesseRcmd=0;
+}
+
+void PIDvitesseL() {
+  if (!inRange(VLerror,margeNVLerror,margePVLerror) && !inRange(Lerror,margeNLerror,margePLerror)){
+    sommeVLerror+=(double) VLerror / (2 * dt/Te);
+    dVLerror=(double) (VLerror - prevVLerror) / dt/Te;
+    prevVLerror = VLerror;
+    PIDVL =(double) (kpVL * VLerror) + (kdVL * dVLerror) + kiVL * sommeVLerror;
+    Serial.print("\tPIDVL= ");
+    Serial.println(PIDVL);
+    vitesseLcmd= constrain(PIDVL,vitesseLcmdmin,vitesseLcmdmax);
+  }
+  else
+    vitesseLcmd=0;
+}
+
+void PIDorientation() {
+  Oerror = Rdist - Ldist;
+  if (!inRange(Oerror,margeNOerror,margePOerror) && !inRange(Lerror,margeNLerror,margePLerror) && !inRange(Rerror,margeNRerror,margePRerror)){
+      sommeOerror+=(double) Oerror / (2 * dt/Te);
+      dOerror=(double) (Oerror - prevOerror) / dt/Te;
+      prevOerror = Oerror;
+      vitesseOcmd =(double) (kpO * Oerror) + (kdO * dOerror) + kiO * sommeOerror;
+    }
+  else
+    vitesseOcmd=0;
+  if (Oerror>margePOerror){
+    vitesseLcmd+=vitesseOcmd;
+    vitesseLcmd=constrain(vitesseLcmd,vitesseLcmdmin,vitesseLcmdmax);
+  }
+  else if(Oerror<margeNOerror){
+    vitesseRcmd+=vitesseOcmd;
+    vitesseRcmd=constrain(vitesseRcmd,vitesseRcmdmin,vitesseRcmdmax);
+  }
+}
+
+void PIDposition(){
+  prevLdist=Ldist;
+  prevRdist=Rdist;
+  prevVLact=vitesseLact;
+  prevVRact=vitesseRact;
+  prevdtL=dtL;
+  prevdtR=dtR;
+  t1=micros();
+  dt=((double) (t1-t0))/1.0e6;
+  Rerror = Rcmd - Rdist;
+  Lerror = Lcmd - Ldist;
+  VRerror=vitesseRcmd-vitesseRact;
+  VLerror=vitesseLcmd-vitesseLact;
+  if (!inRange(dt,mindtR,maxdt)){
+    dt=0;
+    vitesseRact=0;
+    vitesseLact=0;
+  }
+  else {
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+        Rdist=Rdisti;
+        dtR=dtRi;
+    }
+    if (!inRange(dtR,mindtR,maxdtR)){
+        dtR=0;
+        vitesseRact=0;
+    }
+    else {
+        if (prevRdist==Rdist)
+            vitesseRact=0;
+        else{
+            vitesseRact=(double) ((double) ((Rdist-prevRdist) / distUnitR) / (dt/Te*KR))*1.0e2; // cm/s
+//          vitesseRactFilter=0.854*vitesseRactFilter+0.0728*vitesseRact+0.0728*prevVRact;
+        }
+        //vitesseRcmd=25*Te; //cm/s // vitesseRcmd=(Rcmd/(8*duree));
+  
+          //Trapèze Right
+        if (inRange(Rerror,margeNRerror,margePRerror))
+            vitesseRcmd=0;
+        else if (Rdist<Rdistacc){
+             vitesseRcmd = (double) (((double) (0.75*vitesseRcmdmax/Rdistacc))*Rdist);  //pwmR = (double) 2 * ( 1.0e2 / Rdistacc) * Rdist;
+            stopR=false;
+            //pwmRmax=pwmR;
+        }
+        else if(inRange(Rdist,Rdistacc,Rcmd-Rdistdec)) {
+          vitesseRcmd = 25*Te; // pwmR=pwmRmax
+          stopR=false;
+        }
+        else if (Rdist>Rcmd-Rdistdec){
+                sommeRerror+=(double) Rerror / (2 * dt/Te);
+                dRerror=(double) (Rerror - prevRerror) / dt/Te;
+                prevRerror = Rerror;
+                PIDR = (double) (kpR * Rerror) + (kdR * dRerror) + kiR * sommeRerror;
+                vitesseRcmd= constrain(PIDR,vitesseRcmdmin,vitesseRcmdmax);
+                PIDvitesseR();
+                stopR=false;    // remove this if you don't want PIDorientation in this part
+        }
+    }
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+        Ldist=Ldisti;
+        dtL=dtLi;
+      }
+    if (!inRange(dtL,mindtL,maxdtL)){
+        dtL=0;                    
+        vitesseLact=0; 
+    }
+    else {
+        if (prevLdist==Ldist){
+          vitesseLact=0;
+        }
+        else{
+            vitesseLact=(double) ((double) ((Ldist-prevLdist) / distUnitL) / (dt/Te*KL))*1.0e2; // cm/s
+//            vitesseLactFilter=0.854*vitesseLactFilter+0.0728*vitesseLact+0.0728*prevVLact;
+//            vitesseLact=vitesseLactFilter;
+        }
+    }
+    //Trapèze Left
+    if (inRange(Lerror,margeNLerror,margePLerror)){
+        vitesseLcmd=0;
+    }
+    else if (Ldist<Ldistacc){
+          vitesseLcmd = 200*Te;
+       if (vitesseLact!=prevVLact){
+          if (stopL)
+              t2=micros();
+          else{
+              vitesseLcmd = (double) aL *  ((double)((micros()-t2)/1.0e6));   // vitesseLcmd = (double) aL *  ((double)(micros()/1.0e6));
+              stopL=false;
+              //pwmLmax=pwmL;
+          }
+       }
+    }
+    else if(inRange(Ldist,Ldistacc,Lcmd-Ldistdec)) {
+      vitesseLcmd = 250*Te; // pwmL=pwmLmax;
+      stopL=false;
+    }
+    else if (Ldist>Lcmd-Ldistdec){
+          sommeLerror+=(double) Lerror / (2 * dt/Te);
+          dLerror=(double) (Lerror - prevLerror) / dt/Te;
+          prevLerror = Lerror;
+          PIDL = (double) (kpL * Lerror) + (kdL * dLerror) + kiL * sommeLerror;
+          //vitesseLcmd= constrain(PIDL,vitesseLcmdmin,vitesseLcmdmax);
+          if (vitesseLcmd!=0)
+              PIDvitesseL();
+          stopL=false;     // remove this if you don't want PIDorientation in this part
+    }
+    if (!stopR && !stopL)
+        PIDorientation();
+  }
+  t0=t1;
+}
+
+void Go(volatile double cmd){
+  Rcmd=cmd;   //+10.3
+  Lcmd=cmd;   //+10.2
+
+  Rdistacc=Rcmd*0.1;
+  Ldistacc=Lcmd*0.1;
+  Rdistdec=Rcmd*0.15;
+  Ldistdec=Lcmd*0.15;
+  
+  PIDposition();
+  pwmR=vitesseRcmd*4;
+  pwmL=vitesseLcmd*4;
+  motorR(0);
+  motorL(pwmL);
+}
+
+void TurnRight(volatile double angle){
+  Rcmd=-20.8*angle; 
+  Lcmd=20.8*angle;
+  
+  Rdistacc=Rcmd*0.2;
+  Ldistacc=Lcmd*0.2;
+  Rdistdec=Rcmd*0.25;
+  Ldistdec=Lcmd*0.25;
+  
+  PIDposition();
+  motorR(-pwmR);
+  motorL(pwmL);
+}
+void TurnLeft(volatile double angle){
+  Rcmd=20.8*angle;
+  Lcmd=-20.8*angle;
+
+  Rdistacc=Rcmd*0.2;
+  Ldistacc=Lcmd*0.2;
+  Rdistdec=Rcmd*0.25;
+  Ldistdec=Lcmd*0.25;
+  
+  PIDposition();
+  motorR(pwmR);
+  motorL(-pwmL);
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  //Command Encoders
+  pinMode(outputAR, INPUT_PULLUP);
+  pinMode(outputBR, INPUT_PULLUP);
+  pinMode(outputAL, INPUT_PULLUP);
+  pinMode(outputBL, INPUT_PULLUP);
+
+  
+  attachInterrupt(digitalPinToInterrupt(outputAR), ISRtrackAR, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputAL), ISRtrackAL, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputBR), ISRtrackBR, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputBL), ISRtrackBL, RISING);
+
+
+  //Command Motors
+  pinMode(forwardR, OUTPUT);
+  pinMode(backwardR, OUTPUT);
+  pinMode(forwardL, OUTPUT);
+  pinMode(backwardL, OUTPUT);
+
+  timer.setInterval(Te,PIDposition);
+}
+void loop() {
+  timer.run();
+  Go(10);
+  Serial.print("vitesseLcmd= ");
+  Serial.print(vitesseLcmd);
+  Serial.print(" \tvitesseLact= ");
+  Serial.print(vitesseLact);
+  Serial.print(" \tVLerror= ");
+  Serial.print(VLerror);
+    Serial.print(" \tLerror= ");
+    Serial.print(Lerror);
+    Serial.print(" \tLdist= ");
+    Serial.println(Ldist);
+  
+}

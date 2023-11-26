@@ -1,0 +1,222 @@
+//Variables encodeurs
+#define outputAR 2
+#define outputBR 3
+#define outputAL 18
+#define outputBL 19
+volatile float Rdist = 0;
+volatile float Ldist = 0;
+volatile float distUnitR = (float)PI * 40 / 1024 / 10;
+volatile float distUnitL = (float)PI * 40 / 600 / 10;
+
+//Variables moteurs
+float vitesseR = 0 ;
+float vitesseL = 0 ;
+float vitesseO = 0 ;
+#define forwardR 8
+#define backwardR 9
+#define forwardL 10
+#define backwardL 11
+
+//Variables erreurs/commandes position
+volatile float Rcmd = 0;
+volatile float Lcmd = 0; 
+volatile float Rerror;
+volatile float Lerror;
+float prevRerror = 0;
+float prevLerror = 0;
+float sommeRerror = 0;
+float sommeLerror = 0;
+
+//Variables erreurs vitesse
+volatile float Oerror;
+float prevOerror = 0;
+float sommeOerror = 0;
+
+//Encoder functions
+void ISRtrackAR() {
+  Rdist += (digitalRead(outputBR) == LOW) ? distUnitR : -distUnitR;
+}
+void ISRtrackBR() {
+  Rdist += (digitalRead(outputAR) == LOW) ? -distUnitR : distUnitR;
+}
+
+void ISRtrackAL() {
+  Ldist += (digitalRead(outputBL) == LOW) ? distUnitL : -distUnitL;
+}
+
+void ISRtrackBL() {
+  Ldist += (digitalRead(outputAL) == LOW) ? -distUnitL : distUnitL;
+}
+
+//Motor functions
+void motorR(float vR) {
+  if (vR > 0) {
+    analogWrite(forwardR, vR);
+    analogWrite(backwardR, 0);
+  }
+  else {
+    analogWrite(forwardR, 0);
+    analogWrite(backwardR, -vR); //5.2
+  }
+}
+
+void motorL(float vL) {
+  if (vL > 0) {
+    analogWrite(forwardL, vL);
+    analogWrite(backwardL, 0);
+  }
+  else {
+    analogWrite(forwardL, 0);
+    analogWrite(backwardL, -vL); //5.2
+  }
+}
+
+//PID Position Parameters
+
+float kpR = 0.01 ; // 0.01 not great
+float kpL = 0.01 ; // 0.01 Good
+
+float kdR = 7; // 50 GOOD
+float kdL = 7; // 50 Not great
+
+float kiR = 0.0001 ; // 0.000000000001
+float kiL = 0.0001; 
+
+//DONT TOUCH
+float kpO = 0.1; // 10 GOOD
+float kdO = 0.5;  // 1 GOOD
+float kiO = 0.005; // 0.003
+
+float Rdistacc=Rcmd*0.1;
+float Ldistacc=Lcmd*0.1;
+float Rdistdec=Rcmd*0.15;
+float Ldistdec=Lcmd*0.15;
+
+void PIDorientation() {
+  Oerror = Rdist - Ldist;
+  sommeOerror += Oerror;
+  vitesseO = (kpO * Oerror) + (kdO * (Oerror - prevOerror)) + kiO * sommeOerror;
+  prevOerror = Oerror;
+}
+
+void PIDposition() {
+  
+  Rerror = Rcmd - Rdist;
+  sommeRerror +=  Rerror ;
+
+  Lerror = Lcmd - Ldist;
+  sommeLerror +=  Lerror ;
+  
+
+
+  vitesseR = (kpR * Rerror) + (kdR * (Rerror - prevRerror)) + kiR * sommeRerror;
+  vitesseL = (kpL * Lerror) + (kdL * (Lerror - prevLerror)) + kiL * sommeLerror;
+
+  vitesseR = (vitesseR > 180) ? 180 : vitesseR;
+  vitesseL = (vitesseL > 180) ? 180 : vitesseL;
+
+  if (Rdist<Rdistacc)
+    vitesseR = vitesseR / Rdistacc * Rdist;
+  else if (Rdist>Rcmd-Rdistdec)
+    vitesseR = vitesseR / Rdistdec * Rdist;  
+    
+  if (Ldist<Ldistacc)
+    vitesseL = vitesseL / Ldistacc * Ldist;
+  else if (Ldist>Lcmd-Ldistdec)
+    vitesseL = vitesseL / Ldistdec * Ldist; 
+
+  vitesseR = ((vitesseR < 100) && (Rerror > 0)) ? 100 : vitesseR; // min 72
+  vitesseL = ((vitesseL < 100) && (Lerror > 0)) ? 100 : vitesseL;// min 72
+
+  PIDorientation();
+  if (Oerror!=0){
+      vitesseR -= vitesseO;
+      vitesseL += vitesseO;
+  }
+  prevRerror = Rerror;
+  prevLerror = Lerror;
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  //Command Encoders
+  pinMode(outputAR, INPUT_PULLUP);
+  pinMode(outputBR, INPUT_PULLUP);
+  pinMode(outputAL, INPUT_PULLUP);
+  pinMode(outputBL, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(outputAR), ISRtrackAR, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputAL), ISRtrackAL, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputBR), ISRtrackBR, RISING);
+  attachInterrupt(digitalPinToInterrupt(outputBL), ISRtrackBL, RISING);
+
+  //Command Motors
+  pinMode(forwardR, OUTPUT);
+  pinMode(backwardR, OUTPUT);
+  pinMode(forwardL, OUTPUT);
+  pinMode(backwardL, OUTPUT);
+}
+
+void Go(float cmd){
+  Rcmd=cmd;   //110.3
+  Lcmd=cmd;   //110.3
+  PIDposition();
+  motorR(vitesseR);
+  motorL(vitesseL);
+}
+void TurnRight(float angle){
+  Rcmd=-20.8*angle;   //110.3
+  Lcmd=20.8*angle;   //110.3
+  PIDposition();
+  motorR(-vitesseR);
+  motorL(vitesseL);
+}
+void TurnLeft(float angle){
+  Rcmd=20.8*angle; 
+  Lcmd=-20.8*angle; 
+  PIDposition();  
+  motorR(vitesseR);
+  motorL(-vitesseL);
+}
+
+void loop() {
+  Go(10);
+//  TurnRight(90);
+  
+  Serial.print("vitesseL= ");
+  Serial.print(vitesseL);
+  Serial.print(" \tvitesseR= ");
+  Serial.print(vitesseR);
+  Serial.print(" \tOerror= ");
+  Serial.print(Oerror);
+
+  Serial.print(" \tLerror= ");
+  Serial.print(Lerror);
+  Serial.print(" \tRerror= ");
+  Serial.println(Rerror);
+  
+  /*Serial.print("Ldist= ");
+  Serial.print(Ldist);
+  Serial.print("\tRdist= ");
+  Serial.print(Rdist);*/
+  
+  /*if (Rerror>0 && Lerror>0){
+    motorR(82);
+    motorL(92);
+    }
+    else
+     if(Rerror>0){
+        motorR(82);
+        motorL(0);
+      }
+      else
+        if (Lerror>0){
+          motorR(0);
+          motorL(92);
+        }
+        else{
+          motorR(0);
+          motorL(0);
+        }*/
+}
