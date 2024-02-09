@@ -1,60 +1,51 @@
 # Autonomous Athlete Robot
 
-### RobOlympiX 2021, AerobotiX INSAT Club
+### RobOlympiX 2021, AerobotiX
 
-**Skills and technologies used:** C++, Arduino, SOLIDWORKS, Control System, Stability, PID, Odometry, I2C, Encoders, Servo Control, Differential Drive, Path Planning
+**Technologies:** C++, Arduino, SOLIDWORKS, Control System, Stability, PID, Odometry, I2C, Encoders, Servo Control, Differential Drive, Path Planning
 
 ## Introduction
 
-The Autonomous Athlete Robot project, developed for RobOlympiX 2021 in collaboration with AerobotiX INSAT Club, embodies a pioneering effort in creating a 2-wheeled autonomous differential drive robot proficient in shooting hockey pucks and throwing basketballs. Led by a team of 4, the project aimed to revolutionize autonomous navigation algorithms for robotic competitions, demonstrating remarkable advancements in control systems and stability mechanisms.
+The "Autonomous Athlete Robot" project was undertaken as part of the RobOlympiX 2021 competition under the banner of AerobotiX. This endeavor aimed to develop advanced autonomous navigation algorithms for a two-wheeled differential drive robot capable of executing tasks such as shooting hockey pucks and throwing basketballs. 
 
+## Project Scope
+
+ The project was executed between October 15, 2021, and December 18, 2021, involving comprehensive research, development, and testing phases. Led by a team of 4 dedicated individuals, the project focused on pushing the boundaries of control systems, stability, and robotics engineering.
+ 
 ## Key Features
 
-- Robust cascaded PID controller for precise position, velocity, and orientation tracking of DC motors.
-- Implementation of atomic blocks to ensure thread-safe access to shared variables, enhancing encoder reading accuracy.
-- Timer-based sampling approach for PID control signals, optimizing responsiveness with a 15-ms sample time.
-- Integration of anti-windup schemes to mitigate integral windup effects and ensure stable movement.
-- Hardware and software integration of servo motor-based systems for reliable game object manipulation.
-- Exploration of self-tuning control algorithms for adaptive PID parameter adjustment based on real-time conditions.
-
-## Project Overview
-
-Executed within a timeline spanning from October 15, 2021, to December 18, 2021, the project underwent meticulous planning, design, and execution phases. Each team member contributed significantly to critical decision-making processes, ensuring the seamless integration of hardware and software components essential for the robot's functionality.
-
-## Technical Details
-
-- **Cascaded PID Controller**: Achieved a 15x improvement in position control accuracy through optimized PID parameters, ensuring precise movement.
-- **Atomic Blocks**: Implemented to safeguard critical code sections, guaranteeing uninterrupted encoder readings for enhanced control.
-- **Timer-Based Sampling**: Enhanced control loop responsiveness and convergence, facilitating efficient trajectory tracking.
-- **Anti-Windup Schemes**: Integrated to mitigate integral windup effects and maintain stability during non-linear control scenarios.
-- **Servo Motor Integration**: Ensured seamless interaction with game objects, optimizing performance during competition scenarios.
-- **Self-Tuning Control Algorithm**: Explored for adaptive PID parameter adjustment, reducing transient positioning errors by 24%.
+- **Cascaded PID Controller Optimization**: Implementation of a sophisticated PID controller, leveraging real-time encoder feedback for precise motor control. Achieved a remarkable 15x improvement in position accuracy, reducing errors to a mere 1.9 mm/m.
+- **Atomic Blocks for Interrupt Handling**: Implemented atomic blocks to safeguard critical code sections, ensuring uninterrupted operation and accurate encoder readings.
+- **Timer-Based Sampling Approach**: Introduced a novel sampling approach for PID control signals, enhancing responsiveness and convergence with an optimized 15-ms sample time.
+- **Anti-Windup Schemes**: Integration of anti-windup strategies, including proportional zone jacketing logic, to mitigate integral windup effects and maintain stability under varying conditions.
+- **Hardware-Software Integration**: Seamlessly coordinated integration of servo motor-based systems for reliable game object manipulation.
+- **Self-Tuning Control Algorithm**: Explored a self-tuning control algorithm to adapt PID parameters in real-time, resulting in a 24% reduction in transient positioning errors.
 
 ## Getting Started
 
 ### Installation
 
-1. Assemble hardware components.
-2. Upload Arduino code to the microcontroller.
-3. Calibrate sensors and fine-tune PID parameters for optimal performance.
+1. Ensure compatibility and proper setup of hardware components.
+2. Install necessary software dependencies, including Arduino IDE and SOLIDWORKS.
+3. Configure system settings and upload firmware to the Arduino microcontroller.
 
 ### Usage
 
-1. Place the robot on the designated starting point for competition tasks.
-2. Power on the robot and observe autonomous navigation capabilities.
-3. Monitor performance and make necessary adjustments to achieve desired results.
+1. Power on the robot and initialize the control software.
+2. Monitor real-time feedback from encoders and sensors using the provided interface.
+3. Execute autonomous navigation tasks and observe performance in various scenarios.
 
 ## Contributing
 
-Contributions aimed at further enhancing project capabilities and performance are welcome.
+Contributions aimed at enhancing project functionalities and addressing emerging challenges are welcome. Please refer to the project's GitHub repository for contribution guidelines.
 
 ## License
 
 This project is licensed under the [GPL-3.0 License](LICENSE).
 
-## Contact
+## Contacts
 
-For inquiries or feedback, please contact:
+For inquiries or collaboration opportunities, please contact:
 
 - Elyes Khechine: elyeskhechine@gmail.com
 - Saif Nbet: saif.nbet@insat.ucar.tn
