@@ -10,7 +10,7 @@ The "Autonomous Athlete Robot" project was undertaken as part of the RobOlympiX 
 
 ## Project Scope
 
- The project was executed between October 15, 2021, and December 18, 2021, involving comprehensive research, development, and testing phases. Led by a team of 4 dedicated individuals, the project focused on pushing the boundaries of control systems, stability, and robotics engineering.
+ The project was executed between October 15, 2021, and December 18, 2021, involving comprehensive research, development, and testing phases. Led by a team of 4 dedicated individuals, it focused on pushing the boundaries of control systems, stability, and robotics engineering.
  
 ## Key Features
 
