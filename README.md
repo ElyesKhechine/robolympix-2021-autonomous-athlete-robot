@@ -12,7 +12,7 @@ The "Autonomous Athlete Robot" project was undertaken as part of the RobOlympiX 
 
  The project was executed between October 15, 2021, and December 18, 2021, involving comprehensive research, development, and testing phases. Led by a team of 4 dedicated individuals, it focused on pushing the boundaries of control systems, stability, and robotics engineering.
  
-## Key Features
+## Technical Details
 
 - **Cascaded PID Controller Optimization**: Implementation of a sophisticated PID controller, leveraging real-time encoder feedback for precise motor control. Achieved a remarkable 15x improvement in position accuracy, reducing errors to a mere 1.9 mm/m.
 - **Atomic Blocks for Interrupt Handling**: Implemented atomic blocks to safeguard critical code sections, ensuring uninterrupted operation and accurate encoder readings.
