@@ -1,16 +1,16 @@
 # Autonomous Athlete Robot
 
-### RobOlympiX 2021, AerobotiX
+### RobOlympiX 2021, AerobotiX INSAT Club
 
 **Technologies:** C++, Arduino, SOLIDWORKS, Control System, Stability, PID, Odometry, I2C, Encoders, Servo Control, Differential Drive, Path Planning
 
 ## Introduction
 
-The "Autonomous Athlete Robot" project was undertaken as part of the RobOlympiX 2021 competition under the banner of AerobotiX. This endeavor aimed to develop advanced autonomous navigation algorithms for a two-wheeled differential drive robot capable of executing tasks such as shooting hockey pucks and throwing basketballs. 
+This project is an endeavor aimed at developing advanced autonomous navigation algorithms for a 2-wheeled differential drive robot capable of executing tasks such as shooting hockey pucks and throwing basketballs. It focused on pushing the boundaries of control systems, stability, and robotics engineering.
 
 ## Project Scope
 
- The project was executed between October 15, 2021, and December 18, 2021, involving comprehensive research, development, and testing phases. Led by a team of 4 dedicated individuals, it focused on pushing the boundaries of control systems, stability, and robotics engineering.
+The project was executed between October 15, 2021, and December 18, 2021, as part of the RobOlympiX 2021 competition by a team of 4 members of AerobotiX INSAT Club. It involved comprehensive research, development, and testing phases.
  
 ## Technical Details
 
@@ -37,7 +37,7 @@ The "Autonomous Athlete Robot" project was undertaken as part of the RobOlympiX 
 
 ## Contributing
 
-Contributions aimed at enhancing project functionalities and addressing emerging challenges are welcome. Please refer to the project's GitHub repository for contribution guidelines.
+Contributions aimed at enhancing project functionalities and addressing emerging challenges are welcome.
 
 ## License
 
@@ -48,6 +48,6 @@ This project is licensed under the [GPL-3.0 License](LICENSE).
 For inquiries or collaboration opportunities, please contact:
 
 - Elyes Khechine: elyeskhechine@gmail.com
-- Saif Nbet: saif.nbet@insat.ucar.tn
+- Saif Nbet: saifeddine.nbet@insat.ucar.tn
 - Khaled Becher: khaled.becher@insat.ucar.tn
 - Helmi Balhoudi: helmi.balhoudi@insat.ucar.tn
